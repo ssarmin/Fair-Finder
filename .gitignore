@@ -1,0 +1,85 @@
+# .gitignore for Fair-Finder (Python project)
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage
+.coverage
+.coverage.*
+.pytest_cache/
+nosetests.xml
+coverage.xml
+htmlcov/
+
+# mypy
+.mypy_cache/
+
+# Pyright
+.pyright/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables / secrets
+.env
+.env.*
+.env.local
+secrets.env
+
+# Logs
+*.log
+logs/
+
+# Databases
+*.sqlite3
+*.db
+*.db-journal
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node (in case frontend tools added later)
+node_modules/
+
+# VS Code workspace files
+*.code-workspace
+
+# Ignore pip cache and wheelhouse
+pip-wheel-metadata/
+.wheelhouse/
+
+# Ignore coverage output
+coverage/
+
+# Keep data/ tracked by default; if you have large local datasets, consider adding them here
+# data/
