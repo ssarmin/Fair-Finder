@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Simple CLI to search fairs by ZIP using the LocalJSONRepository."""
 import argparse
+import sys
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+
 from src.data.repository import LocalJSONRepository
 
 
