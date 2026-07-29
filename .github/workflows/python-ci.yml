@@ -36,4 +36,4 @@ jobs:
         run: python -m unittest discover -s tests
 
       - name: Run smoke test for search_by_zip
-        run: python scripts/search_by_zip.py 62704 --radius 50 --limit 1
+        run: python scripts/search_by_zip.py --zip 27606 --query 'outdoor pottery markets under 50' --limit 1

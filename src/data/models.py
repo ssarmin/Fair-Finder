@@ -14,6 +14,9 @@ class Fair:
     start_date: Optional[str]
     end_date: Optional[str]
     categories: List[str]
+    price: Optional[float] = None
+    environment: Optional[str] = None
+    description: Optional[str] = None
 
     @classmethod
     def from_dict(cls, d: dict) -> "Fair":
@@ -29,4 +32,7 @@ class Fair:
             start_date=d.get("start_date"),
             end_date=d.get("end_date"),
             categories=d.get("categories", []),
+            price=d.get("price"),
+            environment=d.get("environment"),
+            description=d.get("description"),
         )

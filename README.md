@@ -6,7 +6,7 @@ Fair-Finder is a small Python project for searching fairs and exhibitions by ZIP
 
 - `data/` — sample local JSON data for fairs and ZIP centroids
 - `src/data/` — data-layer implementation with models and repository logic
-- `scripts/search_by_zip.py` — CLI script to search fairs by ZIP and display results
+- `scripts/search_by_zip.py` — CLI script to search fairs by ZIP, natural language query, or both
 - `tests/` — unit tests for the data layer
 - `.github/workflows/python-ci.yml` — GitHub Actions workflow for CI
 - `requirements.txt` — development dependency file for linting
@@ -33,13 +33,25 @@ python -m pip install -r requirements.txt
 Search fairs by ZIP code using the CLI:
 
 ```bash
-python scripts/search_by_zip.py 62704
+python scripts/search_by_zip.py --zip 62704
+```
+
+Search with a natural language query:
+
+```bash
+python scripts/search_by_zip.py --query 'outdoor pottery markets under $50'
+```
+
+Search near a ZIP code and filter by query:
+
+```bash
+python scripts/search_by_zip.py --zip 27606 --query 'outdoor pottery markets under $50' --limit 5
 ```
 
 Add a search radius or limit:
 
 ```bash
-python scripts/search_by_zip.py 62704 --radius 20 --limit 5
+python scripts/search_by_zip.py --zip 62704 --radius 20 --limit 5
 ```
 
 ## Testing

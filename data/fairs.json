@@ -40,7 +40,7 @@
   },
   {
     "id": "ff-004",
-    "name": "Raleigh Fall Fair",
+    "name": "Raleigh Outdoor Pottery Market",
     "address": "500 Commerce St",
     "city": "Raleigh",
     "state": "NC",
@@ -49,6 +49,9 @@
     "longitude": -78.6633,
     "start_date": "2026-09-10",
     "end_date": "2026-09-12",
-    "categories": ["Food", "Music", "Exhibitions"]
+    "categories": ["Pottery", "Market", "Arts", "Artists"],
+    "price": 35.0,
+    "environment": "outdoor",
+    "description": "A lively outdoor pottery market for local artists with handcrafted ceramics and small vendor booths."
   }
 ]
