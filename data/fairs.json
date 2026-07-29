@@ -10,6 +10,7 @@
     "longitude": -89.6501,
     "start_date": "2026-05-15",
     "end_date": "2026-05-18",
+    "price": 315.0,
     "categories": ["Agriculture", "Livestock", "Food"]
   },
   {
@@ -23,6 +24,7 @@
     "longitude": -89.6505,
     "start_date": "2026-07-01",
     "end_date": "2026-07-04",
+    "price": 350.0,
     "categories": ["Exhibition", "Rides", "Music"]
   },
   {
@@ -36,6 +38,7 @@
     "longitude": -88.7978,
     "start_date": "2026-08-20",
     "end_date": "2026-08-22",
+    "price": 0.0,
     "categories": ["Arts", "Crafts", "Local"]
   },
   {
