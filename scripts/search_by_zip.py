@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
-from src.data.repository import LocalJSONRepository
+from src.data.repository import LocalJSONRepository  # noqa: E402
 
 
 def main():
