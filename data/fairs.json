@@ -1,0 +1,54 @@
+[
+  {
+    "id": "ff-001",
+    "name": "Spring County Fair",
+    "address": "123 Main St",
+    "city": "Springfield",
+    "state": "IL",
+    "zip_code": "62704",
+    "latitude": 39.7817,
+    "longitude": -89.6501,
+    "start_date": "2026-05-15",
+    "end_date": "2026-05-18",
+    "categories": ["Agriculture", "Livestock", "Food"]
+  },
+  {
+    "id": "ff-002",
+    "name": "County Expo",
+    "address": "800 Fairgrounds Rd",
+    "city": "Capital City",
+    "state": "IL",
+    "zip_code": "62712",
+    "latitude": 39.8200,
+    "longitude": -89.6505,
+    "start_date": "2026-07-01",
+    "end_date": "2026-07-04",
+    "categories": ["Exhibition", "Rides", "Music"]
+  },
+  {
+    "id": "ff-003",
+    "name": "Summer Arts & Crafts Fair",
+    "address": "45 Arts Ave",
+    "city": "Shelbyville",
+    "state": "IL",
+    "zip_code": "62565",
+    "latitude": 39.4067,
+    "longitude": -88.7978,
+    "start_date": "2026-08-20",
+    "end_date": "2026-08-22",
+    "categories": ["Arts", "Crafts", "Local"]
+  },
+  {
+    "id": "ff-004",
+    "name": "Raleigh Fall Fair",
+    "address": "500 Commerce St",
+    "city": "Raleigh",
+    "state": "NC",
+    "zip_code": "27606",
+    "latitude": 35.8033,
+    "longitude": -78.6633,
+    "start_date": "2026-09-10",
+    "end_date": "2026-09-12",
+    "categories": ["Food", "Music", "Exhibitions"]
+  }
+]
