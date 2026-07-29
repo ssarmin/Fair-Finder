@@ -10,10 +10,20 @@ sys.path.insert(0, str(ROOT_DIR))
 from src.data.repository import LocalJSONRepository  # noqa: E402
 
 
+def _normalize_query(query: str) -> str:
+    if query is None:
+        return query
+    query = query.strip()
+    if len(query) >= 2 and query[0] == query[-1] and query[0] in {'"', "'"}:
+        return query[1:-1].strip()
+    return query
+
+
 def _search_args(args):
     repo = LocalJSONRepository()
-    if args.query:
-        return repo.search(args.query, zip_code=args.zip, radius_miles=args.radius)
+    if args.query is not None:
+        query = _normalize_query(args.query)
+        return repo.search(query, zip_code=args.zip, radius_miles=args.radius)
     return repo.find_by_zip(args.zip, radius_miles=args.radius)
 
 
@@ -31,7 +41,7 @@ def main():
     p.add_argument("--zip", help="ZIP code to search near")
     p.add_argument(
         "--query",
-        help="Natural language search query, for example 'outdoor pottery markets under $50' (use single quotes to preserve the dollar sign)",
+        help="Natural language search query, for example 'outdoor pottery markets under $50' or \"outdoor pottery markets under $50\"",
     )
     p.add_argument(
         "--radius",

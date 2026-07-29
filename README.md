@@ -40,12 +40,14 @@ Search with a natural language query:
 
 ```bash
 python scripts/search_by_zip.py --query 'outdoor pottery markets under $50'
+python scripts/search_by_zip.py --query "outdoor pottery markets under $50"
 ```
 
 Search near a ZIP code and filter by query:
 
 ```bash
 python scripts/search_by_zip.py --zip 27606 --query 'outdoor pottery markets under $50' --limit 5
+python scripts/search_by_zip.py --zip 27606 --query "outdoor pottery markets under $50" --limit 5
 ```
 
 Add a search radius or limit:
