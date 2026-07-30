@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import calendar 
-import re 
-from datetime import date, timedelta 
-from pathlib import Path 
+import calendar
+import re
+from datetime import date, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import joblib 
-from sklearn.feature_extraction.text import TfidfVectorizer 
-from sklearn.linear_model import LogisticRegression 
+import joblib
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
 ZIP_RE = re.compile(r"\b(\d{5})(?:-\d{4})?\b")
@@ -95,39 +95,57 @@ def _parse_date_from_match(match: re.Match) -> Optional[date]:
             return None
     return None
 
+def _relative_date_by_phrase(phrase: str, today: date) -> Optional[Tuple[date, date]]:
+    """Return a (start, end) date tuple for relative date phrases, or None."""
+    if phrase == "this weekend":
+        saturday = today + timedelta((5 - today.weekday()) % 7)
+        sunday = saturday + timedelta(days=1)
+        return saturday, sunday
+
+    if phrase == "next weekend":
+        saturday = today + timedelta(((5 - today.weekday()) % 7) + 7)
+        sunday = saturday + timedelta(days=1)
+        return saturday, sunday
+
+    if phrase == "this week":
+        monday = today - timedelta(days=today.weekday())
+        sunday = monday + timedelta(days=6)
+        return monday, sunday
+
+    if phrase == "next month":
+        year = today.year + (1 if today.month == 12 else 0)
+        month = 1 if today.month == 12 else today.month + 1
+        first_day = date(year, month, 1)
+        last_day = date(year, month, calendar.monthrange(year, month)[1])
+        return first_day, last_day
+
+    # Generic offset keywords like "today", "tomorrow", etc.
+    offset = RELATIVE_DATE_KEYWORDS.get(phrase)
+    if offset is not None:
+        target = today + timedelta(days=offset)
+        return target, target
+
+    return None
 
 def extract_date_range(text: str) -> Optional[Tuple[date, date]]:
     normalized = _normalize_text(text)
-    for phrase, offset in RELATIVE_DATE_KEYWORDS.items():
+    today = date.today()
+
+    # Handle relative phrases via helper to keep complexity low
+    for phrase in RELATIVE_DATE_KEYWORDS:
         if phrase in normalized:
-            today = date.today()
-            if phrase == "this weekend":
-                saturday = today + timedelta((5 - today.weekday()) % 7)
-                sunday = saturday + timedelta(days=1)
-                return saturday, sunday
-            if phrase == "next weekend":
-                saturday = today + timedelta(((5 - today.weekday()) % 7) + 7)
-                sunday = saturday + timedelta(days=1)
-                return saturday, sunday
-            if phrase == "this week":
-                monday = today - timedelta(days=today.weekday())
-                sunday = monday + timedelta(days=6)
-                return monday, sunday
-            if phrase == "next month":
-                year = today.year + (1 if today.month == 12 else 0)
-                month = 1 if today.month == 12 else today.month + 1
-                first_day = date(year, month, 1)
-                last_day = date(year, month, calendar.monthrange(year, month)[1])
-                return first_day, last_day
-            if offset is not None:
-                target = today + timedelta(days=offset)
-                return target, target
+            result = _relative_date_by_phrase(phrase, today)
+            if result:
+                return result
+
+    # Handle explicit date patterns
     for pattern in DATE_PATTERNS:
         match = pattern.search(normalized)
         if match:
             parsed = _parse_date_from_match(match)
             if parsed:
                 return parsed, parsed
+
     return None
 
 
