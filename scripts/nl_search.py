@@ -46,6 +46,10 @@ def main():
             print(f"   Dates: {f.start_date} to {f.end_date}")
         if f.categories:
             print(f"   Categories: {', '.join(f.categories)}")
+        if f.price:
+            print(f"   Price: ${f.price:.2f}")
+        if f.environment:
+            print(f"   Environment: {f.environment}")
         print()
 
 

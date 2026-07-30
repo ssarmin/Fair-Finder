@@ -98,33 +98,24 @@ class LocalJSONRepository:
         self._vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english", max_features=5000)
         self._search_matrix = self._vectorizer.fit_transform(texts)
 
-    def _semantic_scores(self, query: str):
-        self._initialize_search_index()
-        if self._use_transformer and self._model is not None and self._embeddings is not None:
-            query_vector = self._model.encode([query], convert_to_tensor=True, show_progress_bar=False)
-            similarity_tensor = util.cos_sim(query_vector, self._embeddings)
-            return similarity_tensor.cpu().numpy().flatten()
-
-        if self._vectorizer is not None and self._search_matrix is not None:
-            query_vector = self._vectorizer.transform([query])
-            return cosine_similarity(query_vector, self._search_matrix).flatten()
-
-        return []
-
     def _tokenize(self, query: str) -> List[str]:
         return re.findall(r"\b[\w']+\b", query.lower())
 
     def _parse_price(self, query: str) -> Optional[float]:
-        match = re.search(r"(?:under|below|less than)\s*\$?(\d+(?:\.\d+)?)", query.lower())
+        price = query.lower()
+        if "free" in price:
+            return 0.0
+
+        match = re.search(r"(?:under|below|less than)\s*\$?(\d+(?:\.\d+)?)", price)
         if match:
             return float(match.group(1))
         return None
 
     def _parse_environment(self, query: str) -> Optional[str]:
-        lower = query.lower()
-        if "outdoor" in lower:
+        environment = query.lower()
+        if "outdoor" in environment:
             return "outdoor"
-        if "indoor" in lower:
+        if "indoor" in environment:
             return "indoor"
         return None
 
@@ -133,10 +124,15 @@ class LocalJSONRepository:
         fair: Fair,
         max_price: Optional[float],
         environment: Optional[str],
+        query_terms: List[str],
     ) -> bool:
         if max_price is not None:
-            if fair.price is None or fair.price > max_price:
-                return False
+            if max_price == 0.0:
+                if fair.price is not None and fair.price > 0.0:
+                    return False
+            else:
+                if fair.price is None or fair.price >= max_price:
+                    return False
 
         if environment is not None:
             if fair.environment is None:
@@ -144,12 +140,33 @@ class LocalJSONRepository:
             if environment not in fair.environment.lower():
                 return False
 
+        # Strict Artist-Market Whitelist Filter (drops book, science, toy, culinary noise)
+        fair_text = f"{fair.name} {' '.join(fair.categories)} {fair.description or ''}".lower()
+        
+        unwanted_keywords = ["book", "books", "science", "toy", "toys", "culinary", "food", "agriculture", "livestock"]
+        if any(unwanted in fair_text for unwanted in unwanted_keywords):
+            if not any(friendly in fair_text for friendly in ["art", "craft", "pottery", "maker"]):
+                return False
+
+        artist_friendly_keywords = ["art", "arts", "craft", "crafts", "pottery", "maker", "artists", "exhibition", "market", "walk"]
+        specific_focus = [t for t in query_terms if t in ["art", "craft", "pottery", "maker"]]
+        if specific_focus:
+            if not any(keyword in fair_text for keyword in artist_friendly_keywords):
+                return False
+
         return True
 
-    def _score_fair(self, fair: Fair, similarity: float, environment: Optional[str]) -> float:
+    def _score_fair(self, fair: Fair, similarity: float, environment: Optional[str], query_terms: List[str]) -> float:
         score = similarity
+        
+        fair_text = f"{fair.name} {' '.join(fair.categories)}".lower()
+        matching_terms = sum(1 for term in query_terms if term in fair_text)
+        if matching_terms > 0:
+            score += 0.15 * matching_terms
+
         if environment is not None and environment in (fair.environment or "").lower():
             score += 0.05
+            
         return score
 
     def search(
@@ -158,52 +175,77 @@ class LocalJSONRepository:
         zip_code: Optional[str] = None,
         radius_miles: float = 50.0,
     ) -> List[Fair]:
-        """Return fairs matching a natural-language query and optional ZIP proximity."""
+        """Return fairs matching a natural-language query using a hybrid approach:
+        1. Hard filter by extracted constraints (price, environment, ZIP radius, artist relevance).
+        2. Soft rank the filtered candidates using semantic similarity and keyword matching.
+        """
         fairs = self._load_fairs()
         zip_map = self._load_zip_map()
 
         max_price = self._parse_price(query)
         environment = self._parse_environment(query)
-        similarities = self._semantic_scores(query.strip()) if query and query.strip() else [1.0] * len(fairs)
+        query_terms = self._tokenize(query)
 
-        results = []
-        distance = None
         centroid = None
         if zip_code is not None:
             z = str(zip_code)
             if z in zip_map:
                 centroid = zip_map[z]
-                distance = True
 
-        for index, fair in enumerate(fairs):
+        # 1. Hard Filter Candidates
+        candidates = []
+        distances = []
+        for fair in fairs:
+            dist = None
             if centroid is not None:
                 if fair.latitude is None or fair.longitude is None:
                     continue
                 dist = haversine(centroid["latitude"], centroid["longitude"], fair.latitude, fair.longitude)
                 if dist > radius_miles:
                     continue
-            if not self._matches_query(fair, max_price, environment):
+
+            if not self._matches_query(fair, max_price, environment, query_terms):
                 continue
+
+            candidates.append(fair)
+            distances.append(dist)
+
+        if not candidates:
+            return []
+
+        # 2. Semantic Scoring on Filtered Candidates
+        texts = [self._get_search_text(fair) for fair in candidates]
+        self._initialize_search_index()
+
+        if self._use_transformer and self._model is not None:
+            query_vector = self._model.encode([query], convert_to_tensor=True, show_progress_bar=False)
+            candidate_embeddings = self._model.encode(texts, convert_to_tensor=True, show_progress_bar=False)
+            similarity_tensor = util.cos_sim(query_vector, candidate_embeddings)
+            similarities = similarity_tensor.cpu().numpy().flatten()
+        elif self._vectorizer is not None and self._search_matrix is not None:
+            query_vector = self._vectorizer.transform([query])
+            candidate_matrix = self._vectorizer.transform(texts)
+            similarities = cosine_similarity(query_vector, candidate_matrix).flatten()
+        else:
+            similarities = [1.0] * len(candidates)
+
+        results = []
+
+        for index, fair in enumerate(candidates):
             similarity = float(similarities[index]) if index < len(similarities) else 0.0
-            if similarity < 0.05:
+            if similarity < 0.30:
                 continue
-            score = self._score_fair(fair, similarity, environment)
-            results.append((score, dist if centroid is not None else None, fair))
+            score = self._score_fair(fair, similarity, environment, query_terms)
+            dist = distances[index]
+            results.append((score, dist if dist is not None else 0, fair))
 
         results.sort(key=lambda item: (item[0], -item[1] if item[1] is not None else 0), reverse=True)
         return [fair for _, _, fair in results]
 
     def find_by_zip(self, zip_code: str, radius_miles: float = 50.0) -> List[Fair]:
-        """Return fairs matching a ZIP code or within radius of the ZIP centroid.
-
-        Behavior:
-        - If zips.json contains the requested ZIP, return fairs whose distance to the ZIP
-          centroid is <= radius_miles (requires fair.latitude and fair.longitude).
-        - Otherwise fallback to returning fairs with an exact zip_code match.
-        """
+        """Return fairs matching a ZIP code or within radius of the ZIP centroid."""
         fairs = self._load_fairs()
         zip_map = self._load_zip_map()
-        # normalize zip to string
         z = str(zip_code)
         if z in zip_map:
             centroid = zip_map[z]
@@ -216,21 +258,14 @@ class LocalJSONRepository:
                 dist = haversine(lat0, lon0, f.latitude, f.longitude)
                 if dist <= radius_miles:
                     results.append((dist, f))
-            # sort by distance
             results.sort(key=lambda x: x[0])
             return [f for _, f in results]
         else:
-            # fallback: exact zip match
             return [f for f in fairs if f.zip_code == z]
 
 
 class ExampleExternalAPIRepository:
-    """Placeholder for a repository that would call an external API (e.g., a fairs API).
-
-    To implement: perform HTTP requests to the external service, transform results to Fair objects,
-    and return them. Keep the same method signature as LocalJSONRepository to make swapping
-    implementations simple.
-    """
+    """Placeholder for a repository that would call an external API (e.g., a fairs API)."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key
