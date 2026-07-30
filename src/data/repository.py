@@ -4,7 +4,12 @@ import re
 from pathlib import Path
 from typing import List, Optional, Protocol
 
-from sentence_transformers import SentenceTransformer, util
+try:
+    from sentence_transformers import SentenceTransformer, util
+except ImportError:  # pragma: no cover
+    SentenceTransformer = None
+    util = None
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -42,7 +47,7 @@ class LocalJSONRepository:
         self._embeddings = None
         self._vectorizer: Optional[TfidfVectorizer] = None
         self._search_matrix = None
-        self._use_transformer = True
+        self._use_transformer = SentenceTransformer is not None
 
     def _load_fairs(self) -> List[Fair]:
         if self._fairs is None:
@@ -87,7 +92,7 @@ class LocalJSONRepository:
         fairs = self._load_fairs()
         texts = [self._get_search_text(fair) for fair in fairs]
 
-        if self._use_transformer:
+        if self._use_transformer and SentenceTransformer is not None:
             try:
                 self._model = SentenceTransformer("all-MiniLM-L6-v2")
                 self._embeddings = self._model.encode(texts, convert_to_tensor=True, show_progress_bar=False)
@@ -140,17 +145,16 @@ class LocalJSONRepository:
             if environment not in fair.environment.lower():
                 return False
 
-        # Strict Artist-Market Whitelist Filter (drops book, science, toy, culinary noise)
-        fair_text = f"{fair.name} {' '.join(fair.categories)} {fair.description or ''}".lower()
-        
-        unwanted_keywords = ["book", "books", "science", "toy", "toys", "culinary", "food", "agriculture", "livestock"]
-        if any(unwanted in fair_text for unwanted in unwanted_keywords):
-            if not any(friendly in fair_text for friendly in ["art", "craft", "pottery", "maker"]):
-                return False
-
         artist_friendly_keywords = ["art", "arts", "craft", "crafts", "pottery", "maker", "artists", "exhibition", "market", "walk"]
-        specific_focus = [t for t in query_terms if t in ["art", "craft", "pottery", "maker"]]
+        specific_focus = [t for t in query_terms if t in ["art", "arts", "craft", "crafts", "pottery", "maker", "artists"]]
+
         if specific_focus:
+            fair_text = f"{fair.name} {' '.join(fair.categories)} {fair.description or ''}".lower()
+            unwanted_keywords = ["book", "books", "science", "toy", "toys", "culinary"]
+            if any(unwanted in fair_text for unwanted in unwanted_keywords):
+                if not any(friendly in fair_text for friendly in ["art", "craft", "pottery", "maker"]):
+                    return False
+
             if not any(keyword in fair_text for keyword in artist_friendly_keywords):
                 return False
 
@@ -217,7 +221,7 @@ class LocalJSONRepository:
         texts = [self._get_search_text(fair) for fair in candidates]
         self._initialize_search_index()
 
-        if self._use_transformer and self._model is not None:
+        if self._use_transformer and self._model is not None and util is not None:
             query_vector = self._model.encode([query], convert_to_tensor=True, show_progress_bar=False)
             candidate_embeddings = self._model.encode(texts, convert_to_tensor=True, show_progress_bar=False)
             similarity_tensor = util.cos_sim(query_vector, candidate_embeddings)
@@ -230,10 +234,11 @@ class LocalJSONRepository:
             similarities = [1.0] * len(candidates)
 
         results = []
+        min_similarity = 0.30 if self._use_transformer else 0.0
 
         for index, fair in enumerate(candidates):
             similarity = float(similarities[index]) if index < len(similarities) else 0.0
-            if similarity < 0.30:
+            if similarity < min_similarity:
                 continue
             score = self._score_fair(fair, similarity, environment, query_terms)
             dist = distances[index]

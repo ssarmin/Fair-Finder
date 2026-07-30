@@ -50,6 +50,18 @@ class TestLocalJSONRepository(unittest.TestCase):
             "Expected at least one fair with Food or Market category for semantic query",
         )
 
+    def test_search_fallback_to_tfidf_when_transformers_disabled(self):
+        self.repo._use_transformer = False
+        self.repo._model = None
+        self.repo._embeddings = None
+        query = "outdoor pottery markets under $50"
+        results = self.repo.search(query, zip_code="27606", radius_miles=50)
+        self.assertTrue(results, f"Expected results for TF-IDF fallback query '{query}'")
+        self.assertTrue(
+            any(f.zip_code == "27606" and f.environment == "outdoor" and f.price is not None and f.price <= 50 for f in results),
+            "Expected at least one outdoor, affordable pottery market near ZIP 27606 using TF-IDF fallback",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,27 +1,33 @@
 # Fair-Finder
 
-Fair-Finder is a small Python project for searching fairs and exhibitions by ZIP code.
+Fair-Finder is a small Python project for searching fairs and exhibitions using local JSON data.
+
+## What this project does
+
+- Loads fair listings from `data/fairs.json`.
+- Allows searching by ZIP code and/or natural language queries.
+- Supports a hybrid search engine with hard filters and semantic ranking.
+- Uses Hugging Face Sentence-Transformers when available and falls back to TF-IDF when needed.
 
 ## Project structure
 
-- `data/` — sample local JSON data for fairs and ZIP centroids
-- `src/data/` — data-layer implementation with models and repository logic
-- `scripts/search_by_zip.py` — CLI script to search fairs by ZIP, natural language query, or both
-- `tests/` — unit tests for the data layer
-- `.github/workflows/python-ci.yml` — GitHub Actions workflow for CI
-- `requirements.txt` — development dependency file for linting
-- `pyproject.toml` — project metadata and tool configuration
+- `data/` — local sample JSON data for fairs and ZIP centroids.
+- `src/data/` — models and repository search logic.
+- `scripts/search_by_zip.py` — simple CLI for ZIP and natural language search.
+- `tests/` — unit tests for repository behavior.
+- `requirements.txt` — Python dependencies required to run the code.
+- `pyproject.toml` — package metadata and tooling configuration.
 
 ## Setup
 
-1. Create a virtual environment (recommended):
+1. Create and activate a Python virtual environment:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-2. Install the development requirements:
+2. Install dependencies:
 
 ```bash
 python -m pip install --upgrade pip
@@ -30,7 +36,7 @@ python -m pip install -r requirements.txt
 
 ## Running locally
 
-Search fairs by ZIP code using the CLI:
+Search fairs near a ZIP code using the CLI:
 
 ```bash
 python scripts/search_by_zip.py --zip 62704
@@ -40,31 +46,43 @@ Search with a natural language query:
 
 ```bash
 python scripts/search_by_zip.py --query 'outdoor pottery markets under $50'
-python scripts/search_by_zip.py --query "outdoor pottery markets under $50"
 ```
 
-The query engine now uses lightweight semantic similarity matching over fair names, descriptions, categories, and location metadata. It uses a Hugging Face Sentence-Transformers model (`all-MiniLM-L6-v2`) under the hood, which helps conceptually related queries like `agriculture fair` or `food market` match fairs with categories such as `Agriculture`, `Food`, or `Market`.
-
-Search near a ZIP code and filter by query:
+Search near a ZIP code with a query, radius, or result limit:
 
 ```bash
-python scripts/search_by_zip.py --zip 27606 --query 'outdoor pottery markets under $50' --limit 5
-python scripts/search_by_zip.py --zip 27606 --query "outdoor pottery markets under $50" --limit 5
+python scripts/search_by_zip.py --zip 27606 --query 'outdoor pottery markets under $50' --radius 20 --limit 5
 ```
 
-Add a search radius or limit:
+## How search works
 
-```bash
-python scripts/search_by_zip.py --zip 62704 --radius 20 --limit 5
-```
+`LocalJSONRepository.search(query, zip_code, radius_miles)` performs:
 
-## Testing
+1. Extraction of simple constraints from the query:
+   - price filters like `under $50`
+   - environment filters like `outdoor` or `indoor`
+2. Location filtering by ZIP code and radius.
+3. Candidate filtering by price, environment, and query-related terms.
+4. Semantic ranking of remaining candidates.
 
-Run unit tests locally with:
+The ranking prefers a Sentence-Transformers model (`all-MiniLM-L6-v2`) when available. If the model cannot be loaded, the repository automatically falls back to a TF-IDF similarity search so the application still works offline or behind a blocked network.
+
+This helps conceptually related queries like `agriculture fair` or `food market` match fairs with categories such as `Agriculture`, `Food`, or `Market`.
+
+## Tests
+
+Run the unit tests locally with:
 
 ```bash
 python -m unittest discover -s tests
 ```
+
+The tests cover:
+
+- ZIP radius lookup with `find_by_zip()`.
+- Natural language query search and filtering.
+- Transformer-based semantic search behavior.
+- TF-IDF fallback behavior when the transformer model is unavailable.
 
 ## Linting
 
