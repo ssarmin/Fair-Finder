@@ -4,6 +4,9 @@ import re
 from pathlib import Path
 from typing import List, Optional, Protocol
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
 from .models import Fair
 from .utils import haversine
 
@@ -34,6 +37,8 @@ class LocalJSONRepository:
         self.data_dir = Path(data_dir) if data_dir else root / "data"
         self._fairs: Optional[List[Fair]] = None
         self._zip_map = None
+        self._vectorizer: Optional[TfidfVectorizer] = None
+        self._search_matrix = None
 
     def _load_fairs(self) -> List[Fair]:
         if self._fairs is None:
@@ -52,6 +57,36 @@ class LocalJSONRepository:
             except FileNotFoundError:
                 self._zip_map = {}
         return self._zip_map
+
+    def _get_search_text(self, fair: Fair) -> str:
+        return " ".join(
+            filter(
+                None,
+                [
+                    fair.name,
+                    fair.description,
+                    fair.city,
+                    fair.state,
+                    fair.address,
+                    fair.environment,
+                    " ".join(fair.categories),
+                ],
+            )
+        ).lower()
+
+    def _initialize_search_index(self) -> None:
+        if self._vectorizer is not None and self._search_matrix is not None:
+            return
+        fairs = self._load_fairs()
+        self._vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english", max_features=5000)
+        self._search_matrix = self._vectorizer.fit_transform([self._get_search_text(fair) for fair in fairs])
+
+    def _semantic_scores(self, query: str):
+        self._initialize_search_index()
+        if self._search_matrix is None or self._vectorizer is None:
+            return []
+        query_vector = self._vectorizer.transform([query])
+        return cosine_similarity(query_vector, self._search_matrix).flatten()
 
     def _tokenize(self, query: str) -> List[str]:
         return re.findall(r"\b[\w']+\b", query.lower())
@@ -73,7 +108,6 @@ class LocalJSONRepository:
     def _matches_query(
         self,
         fair: Fair,
-        tokens: List[str],
         max_price: Optional[float],
         environment: Optional[str],
     ) -> bool:
@@ -87,91 +121,12 @@ class LocalJSONRepository:
             if environment not in fair.environment.lower():
                 return False
 
-        if not tokens:
-            return True
-
-        searchable = " ".join(
-            filter(
-                None,
-                [
-                    fair.name,
-                    fair.description,
-                    fair.city,
-                    fair.state,
-                    fair.address,
-                    fair.environment,
-                ],
-            )
-        ).lower()
-        categories = [c.lower() for c in fair.categories]
-
-        stop_words = {
-            "the",
-            "and",
-            "for",
-            "in",
-            "under",
-            "below",
-            "less",
-            "than",
-            "of",
-            "a",
-            "an",
-            "to",
-            "with",
-            "near",
-            "within",
-            "on",
-            "at",
-            "by",
-            "or",
-            "outdoor",
-            "indoor",
-        }
-        query_tokens = [token for token in tokens if token not in stop_words and not token.isdigit()]
-        if not query_tokens:
-            return True
-
-        for token in query_tokens:
-            search_terms = {token}
-            if token.endswith("s"):
-                search_terms.add(token[:-1])
-            for term in search_terms:
-                if term in searchable or term in categories:
-                    break
-            else:
-                return False
-
         return True
 
-    def _score_fair(self, fair: Fair, tokens: List[str], environment: Optional[str]) -> int:
-        text = " ".join(
-            filter(
-                None,
-                [
-                    fair.name,
-                    fair.description,
-                    fair.city,
-                    fair.state,
-                    fair.address,
-                    fair.environment,
-                ],
-            )
-        ).lower()
-        categories = [c.lower() for c in fair.categories]
-        score = 0
-        for token in tokens:
-            search_terms = {token}
-            if token.endswith("s"):
-                search_terms.add(token[:-1])
-            for term in search_terms:
-                if term in text:
-                    score += 3
-                if term in categories:
-                    score += 2
-        if environment is not None and fair.environment is not None:
-            if environment in fair.environment.lower():
-                score += 2
+    def _score_fair(self, fair: Fair, similarity: float, environment: Optional[str]) -> float:
+        score = similarity
+        if environment is not None and environment in (fair.environment or "").lower():
+            score += 0.05
         return score
 
     def search(
@@ -186,7 +141,7 @@ class LocalJSONRepository:
 
         max_price = self._parse_price(query)
         environment = self._parse_environment(query)
-        tokens = self._tokenize(query)
+        similarities = self._semantic_scores(query.strip()) if query and query.strip() else [1.0] * len(fairs)
 
         results = []
         distance = None
@@ -197,16 +152,19 @@ class LocalJSONRepository:
                 centroid = zip_map[z]
                 distance = True
 
-        for fair in fairs:
+        for index, fair in enumerate(fairs):
             if centroid is not None:
                 if fair.latitude is None or fair.longitude is None:
                     continue
                 dist = haversine(centroid["latitude"], centroid["longitude"], fair.latitude, fair.longitude)
                 if dist > radius_miles:
                     continue
-            if not self._matches_query(fair, tokens, max_price, environment):
+            if not self._matches_query(fair, max_price, environment):
                 continue
-            score = self._score_fair(fair, tokens, environment)
+            similarity = float(similarities[index]) if index < len(similarities) else 0.0
+            if similarity < 0.05:
+                continue
+            score = self._score_fair(fair, similarity, environment)
             results.append((score, dist if centroid is not None else None, fair))
 
         results.sort(key=lambda item: (item[0], -item[1] if item[1] is not None else 0), reverse=True)

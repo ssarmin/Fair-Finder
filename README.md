@@ -43,6 +43,8 @@ python scripts/search_by_zip.py --query 'outdoor pottery markets under $50'
 python scripts/search_by_zip.py --query "outdoor pottery markets under $50"
 ```
 
+The query engine now uses lightweight semantic similarity matching over fair names, descriptions, categories, and location metadata. This helps conceptually related queries like `agriculture fair` or `food market` match fairs with categories such as `Agriculture`, `Food`, or `Market`.
+
 Search near a ZIP code and filter by query:
 
 ```bash
