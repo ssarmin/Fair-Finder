@@ -1,0 +1,17 @@
+[
+  {"text": "Show me food truck fairs near 94110 under $20", "intent": "search"},
+  {"text": "Find craft fairs in Denver next weekend", "intent": "search"},
+  {"text": "Fairs near 10001", "intent": "find_by_zip"},
+  {"text": "Outdoor markets around 02139 within 10 miles", "intent": "search"},
+  {"text": "List indoor art fairs on July 10", "intent": "search"},
+  {"text": "Find family-friendly fairs near 30303", "intent": "find_by_zip"},
+  {"text": "food trucks in San Francisco", "intent": "search"},
+  {"text": "Farmer's markets near 60614 this Saturday", "intent": "search"},
+  {"text": "Live music events near 90012", "intent": "search"},
+  {"text": "Show me artisan craft shows in Austin", "intent": "search"},
+  {"text": "Indoor art markets this weekend", "intent": "search"},
+  {"text": "Markets within 5 miles of 94110", "intent": "search"},
+  {"text": "Arts and crafts festival next month", "intent": "search"},
+  {"text": "Find fairs around 33139", "intent": "find_by_zip"},
+  {"text": "Family-friendly events under $30", "intent": "search"}
+]
