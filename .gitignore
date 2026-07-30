@@ -81,5 +81,8 @@ pip-wheel-metadata/
 # Ignore coverage output
 coverage/
 
+# Ignore joblib files
+*.joblib
+
 # Keep data/ tracked by default; if you have large local datasets, consider adding them here
 # data/
