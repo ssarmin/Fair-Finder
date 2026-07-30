@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import List, Optional, Protocol
 
+from sentence_transformers import SentenceTransformer, util
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -37,8 +38,11 @@ class LocalJSONRepository:
         self.data_dir = Path(data_dir) if data_dir else root / "data"
         self._fairs: Optional[List[Fair]] = None
         self._zip_map = None
+        self._model: Optional[SentenceTransformer] = None
+        self._embeddings = None
         self._vectorizer: Optional[TfidfVectorizer] = None
         self._search_matrix = None
+        self._use_transformer = True
 
     def _load_fairs(self) -> List[Fair]:
         if self._fairs is None:
@@ -75,18 +79,37 @@ class LocalJSONRepository:
         ).lower()
 
     def _initialize_search_index(self) -> None:
-        if self._vectorizer is not None and self._search_matrix is not None:
+        if self._use_transformer and self._model is not None and self._embeddings is not None:
             return
+        if not self._use_transformer and self._vectorizer is not None and self._search_matrix is not None:
+            return
+
         fairs = self._load_fairs()
+        texts = [self._get_search_text(fair) for fair in fairs]
+
+        if self._use_transformer:
+            try:
+                self._model = SentenceTransformer("all-MiniLM-L6-v2")
+                self._embeddings = self._model.encode(texts, convert_to_tensor=True, show_progress_bar=False)
+                return
+            except Exception:
+                self._use_transformer = False
+
         self._vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english", max_features=5000)
-        self._search_matrix = self._vectorizer.fit_transform([self._get_search_text(fair) for fair in fairs])
+        self._search_matrix = self._vectorizer.fit_transform(texts)
 
     def _semantic_scores(self, query: str):
         self._initialize_search_index()
-        if self._search_matrix is None or self._vectorizer is None:
-            return []
-        query_vector = self._vectorizer.transform([query])
-        return cosine_similarity(query_vector, self._search_matrix).flatten()
+        if self._use_transformer and self._model is not None and self._embeddings is not None:
+            query_vector = self._model.encode([query], convert_to_tensor=True, show_progress_bar=False)
+            similarity_tensor = util.cos_sim(query_vector, self._embeddings)
+            return similarity_tensor.cpu().numpy().flatten()
+
+        if self._vectorizer is not None and self._search_matrix is not None:
+            query_vector = self._vectorizer.transform([query])
+            return cosine_similarity(query_vector, self._search_matrix).flatten()
+
+        return []
 
     def _tokenize(self, query: str) -> List[str]:
         return re.findall(r"\b[\w']+\b", query.lower())

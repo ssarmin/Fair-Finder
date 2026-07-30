@@ -41,6 +41,15 @@ class TestLocalJSONRepository(unittest.TestCase):
             "Expected at least one fair with Agriculture or Food category for semantic query",
         )
 
+    def test_search_semantic_food_market(self):
+        query = "food market"
+        results = self.repo.search(query, zip_code="62704", radius_miles=50)
+        self.assertTrue(results, f"Expected results for semantic query '{query}'")
+        self.assertTrue(
+            any("Food" in f.categories or "Market" in f.categories for f in results),
+            "Expected at least one fair with Food or Market category for semantic query",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
