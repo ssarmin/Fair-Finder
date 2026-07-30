@@ -21,7 +21,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 88
-lint.select = ["E", "F", "I", "B", "C", "Q"]
-lint.ignore = ["E501"]
+select = ["E", "F", "I", "B", "C", "Q"]
+ignore = ["E501"]
 target-version = "py311"
 exclude = [".git", "__pycache__", ".venv", "build", "dist", "data", "tests"]
