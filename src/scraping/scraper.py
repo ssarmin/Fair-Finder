@@ -93,6 +93,69 @@ def _build_generic_record(url: str, soup: BeautifulSoup) -> Optional[Dict[str, O
     return record
 
 
+def _fetch_page_html(url: str, headers: Dict[str, str], timeout: int = 20) -> str:
+    """Fetch page HTML using requests with urllib fallback."""
+    session = requests.Session()
+    session.trust_env = False
+    try:
+        response = session.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        return response.text
+    except requests.RequestException:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as handle:
+            return handle.read().decode("utf-8", "ignore")
+
+
+def _collect_heading_candidates(soup: BeautifulSoup) -> List[str]:
+    """Return a list of non-empty Elementor heading candidate texts."""
+    heading_candidates: List[str] = []
+    for heading in soup.select("h1.elementor-heading-title, h2.elementor-heading-title, h3.elementor-heading-title"):
+        text = heading.get_text(" ", strip=True)
+        if text:
+            heading_candidates.append(text)
+    return heading_candidates
+
+
+def _extract_items_from_widgets(soup: BeautifulSoup, url: str, heading_candidates: List[str]) -> List[Dict[str, Optional[str]]]:
+    """Extract records from div.elementor-widget-text-editor widgets."""
+    items: List[Dict[str, Optional[str]]] = []
+    text_widgets = soup.select("div.elementor-widget-text-editor")
+
+    for widget in text_widgets:
+        widget_text = widget.get_text("\n", strip=True)
+        if not widget_text:
+            continue
+
+        record: Dict[str, Optional[str]] = {
+            "name": None,
+            "date_text": None,
+            "location_text": None,
+            "fee_text": None,
+            "url": url,
+        }
+
+        if heading_candidates:
+            record["name"] = heading_candidates[0]
+
+        lines = [line.strip() for line in widget_text.splitlines() if line.strip()]
+        joined_text = "\n".join(lines)
+        lower_text = joined_text.lower()
+
+        if "location" in lower_text:
+            record["location_text"] = joined_text
+        if any(token in lower_text for token in ["date", "deadline", "call opens", "call closes", "opening", "closed"]):
+            record["date_text"] = joined_text
+        if any(token in lower_text for token in ["fee", "budget", "compensation", "entry fee"]):
+            record["fee_text"] = joined_text
+
+        # keep original behavior which used any(record.values()) (url is always present)
+        if any(record.values()):
+            items.append(record)
+
+    return items
+
+
 def scrape_page(url: str, delay_seconds: float = 0.5) -> List[Dict[str, Optional[str]]]:
     """Fetch a page and extract raw event-like content from the page body.
 
@@ -108,67 +171,15 @@ def scrape_page(url: str, delay_seconds: float = 0.5) -> List[Dict[str, Optional
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    session = requests.Session()
-    session.trust_env = False
-
-    try:
-        response = session.get(url, headers=headers, timeout=20)
-        response.raise_for_status()
-        page_html = response.text
-    except requests.RequestException:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as handle:
-            page_html = handle.read().decode("utf-8", "ignore")
+    page_html = _fetch_page_html(url, headers, timeout=20)
 
     if delay_seconds > 0:
         time.sleep(delay_seconds)
 
     soup = BeautifulSoup(page_html, "html.parser")
 
-    items: List[Dict[str, Optional[str]]] = []
-
-    # The page uses Elementor headings for titles and text-editor widgets for
-    # descriptive content. We collect the visible text from those blocks and keep
-    # it in a raw form for later cleaning.
-    heading_candidates = []
-    for heading in soup.select("h1.elementor-heading-title, h2.elementor-heading-title, h3.elementor-heading-title"):
-        text = heading.get_text(" ", strip=True)
-        if text:
-            heading_candidates.append(text)
-
-    text_widgets = soup.select("div.elementor-widget-text-editor")
-
-    for widget in text_widgets:
-        widget_text = widget.get_text("\n", strip=True)
-        if not widget_text:
-            continue
-
-        # Keep the raw text as-is; no normalization yet.
-        record: Dict[str, Optional[str]] = {
-            "name": None,
-            "date_text": None,
-            "location_text": None,
-            "fee_text": None,
-            "url": url,
-        }
-
-        # Use the first non-empty heading as the name when available.
-        if heading_candidates:
-            record["name"] = heading_candidates[0]
-
-        lines = [line.strip() for line in widget_text.splitlines() if line.strip()]
-        joined_text = "\n".join(lines)
-
-        lower_text = joined_text.lower()
-        if "location" in lower_text:
-            record["location_text"] = joined_text
-        if any(token in lower_text for token in ["date", "deadline", "call opens", "call closes", "opening", "closed"]):
-            record["date_text"] = joined_text
-        if any(token in lower_text for token in ["fee", "budget", "compensation", "entry fee"]):
-            record["fee_text"] = joined_text
-
-        if any(record.values()):
-            items.append(record)
+    heading_candidates = _collect_heading_candidates(soup)
+    items = _extract_items_from_widgets(soup, url, heading_candidates)
 
     if not items and heading_candidates:
         items.append(
