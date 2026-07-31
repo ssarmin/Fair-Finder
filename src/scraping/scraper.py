@@ -41,13 +41,67 @@ def _looks_like_date(text: str) -> bool:
 def _looks_like_location(text: str) -> bool:
     if not text:
         return False
-    return bool(re.search(r"\b(raleigh|durham|chapel hill|cary|wake|orange|nc|north carolina|[0-9]{5}(?:-[0-9]{4})?)\b", text, re.I))
+    if re.search(r"\b\d{5}(?:-\d{4})?\b", text):
+        return True
+    if re.search(r"\b(nc|north carolina)\b", text, re.I):
+        return True
+    if re.search(r"\b(raleigh|durham|chapel hill|cary)\b", text, re.I):
+        return bool(re.search(r"\b(at|on|near|street|road|ave|avenue|blvd|boulevard|dr|drive|lane|ln|way|parkway|pkwy|square|plaza|suite|unit|apt|po box|box)\b", text, re.I) or re.search(r"[,:]", text) or re.search(r"\b\d+\b", text))
+
+    if re.search(r"\b(hall|drive|street|road|avenue|ave|lane|ln|way|blvd|boulevard|parkway|pkwy|square|plaza|suite|unit|apt|box)\b", text, re.I):
+        return True
+
+    return False
 
 
 def _looks_like_fee(text: str) -> bool:
     if not text:
         return False
     return bool(re.search(r"\b(fee|free|donation|admission|ticket|cost|budget|compensation)\b", text, re.I) or "$" in text)
+
+
+def _clean_text(text: Optional[str]) -> Optional[str]:
+    if not text:
+        return None
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    cleaned = re.sub(r"^(?:location|date|fee)\s*[:\-]\s*", "", cleaned, flags=re.I)
+    return cleaned or None
+
+
+def _first_matching_chunk(chunks: List[str], predicate) -> Optional[str]:
+    matches: List[tuple[str, int]] = []
+    for index, chunk in enumerate(chunks):
+        cleaned = _clean_text(chunk)
+        if cleaned and predicate(cleaned):
+            matches.append((cleaned, index))
+
+    if not matches:
+        return None
+
+    def rank(item: tuple[str, int]) -> tuple[int, int, int, int, str]:
+        text, order = item
+        lower = text.lower()
+        address_score = 0
+        if re.search(r"\b\d{5}(?:-\d{4})?\b", text):
+            address_score += 5
+        if re.search(r"\b(raleigh|durham|chapel hill|cary|nc|north carolina)\b", text, re.I):
+            address_score += 3
+        if re.search(r"\b(hall|drive|street|road|avenue|ave|lane|ln|way|blvd|boulevard|parkway|pkwy|square|plaza|suite|unit|apt|box)\b", text, re.I):
+            address_score += 4
+        if re.search(r"\b(location|address|at|near)\b", lower):
+            address_score += 2
+        if re.search(r"\b(date|location)\b", lower):
+            address_score += 2
+        if re.search(r"\b(november|december|september|october|january|february|march|april|may|june|july)\b", lower):
+            address_score += 1
+        if len(text) > 220:
+            address_score -= 2
+        if "mailing address" in lower:
+            address_score -= 6
+        return (-address_score, len(text), text.count(" "), order, text)
+
+    matches.sort(key=rank)
+    return matches[0][0]
 
 
 def _build_generic_record(url: str, soup: BeautifulSoup) -> Optional[Dict[str, Optional[str]]]:
@@ -67,25 +121,16 @@ def _build_generic_record(url: str, soup: BeautifulSoup) -> Optional[Dict[str, O
         if text and text not in chunks:
             chunks.append(text)
 
-    body_text = "\n".join(chunk for chunk in chunks if chunk)
-    if not body_text:
+    if not chunks:
         return None
 
     record: Dict[str, Optional[str]] = {
         "name": heading_text or title_text,
-        "date_text": None,
-        "location_text": None,
-        "fee_text": None,
+        "date_text": _first_matching_chunk(chunks, _looks_like_date),
+        "location_text": _first_matching_chunk(chunks, _looks_like_location),
+        "fee_text": _first_matching_chunk(chunks, _looks_like_fee),
         "url": url,
     }
-
-    lower_text = body_text.lower()
-    if _looks_like_date(body_text):
-        record["date_text"] = body_text
-    if _looks_like_location(body_text):
-        record["location_text"] = body_text
-    if _looks_like_fee(body_text):
-        record["fee_text"] = body_text
 
     if not any(record.values()):
         return None
@@ -139,15 +184,10 @@ def _extract_items_from_widgets(soup: BeautifulSoup, url: str, heading_candidate
             record["name"] = heading_candidates[0]
 
         lines = [line.strip() for line in widget_text.splitlines() if line.strip()]
-        joined_text = "\n".join(lines)
-        lower_text = joined_text.lower()
-
-        if "location" in lower_text:
-            record["location_text"] = joined_text
-        if any(token in lower_text for token in ["date", "deadline", "call opens", "call closes", "opening", "closed"]):
-            record["date_text"] = joined_text
-        if any(token in lower_text for token in ["fee", "budget", "compensation", "entry fee"]):
-            record["fee_text"] = joined_text
+        if lines:
+            record["location_text"] = _first_matching_chunk(lines, _looks_like_location)
+            record["date_text"] = _first_matching_chunk(lines, _looks_like_date)
+            record["fee_text"] = _first_matching_chunk(lines, _looks_like_fee)
 
         # keep original behavior which used any(record.values()) (url is always present)
         if any(record.values()):

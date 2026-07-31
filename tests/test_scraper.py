@@ -78,3 +78,35 @@ def test_scraper_falls_back_to_title_and_meta_for_generic_pages(monkeypatch):
     assert "27601" in (first["location_text"] or "")
     assert "September 25, 2026" in (first["date_text"] or "")
     assert "$20" in (first["fee_text"] or "")
+
+
+def test_scraper_prefers_address_like_location_snippets(monkeypatch):
+    class DummyResponse:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    html = """
+    <html>
+      <body>
+        <h1>Annual Holiday Crafts Fair</h1>
+        <p>DATE: Saturday, November 21, 2026 10 a.m.-5 p.m.</p>
+        <p>Street Gallery</p>
+        <p>Location: The Crafts Center Thompson Hall 210 Jensen Drive Raleigh, NC 27606</p>
+      </body>
+    </html>
+    """
+
+    def fake_get(*args, **kwargs):
+        return DummyResponse(html)
+
+    monkeypatch.setattr("src.scraping.scraper.requests.Session.get", fake_get)
+
+    items = scrape_page("https://example.com/address", delay_seconds=0)
+
+    assert items
+    first = items[0]
+    assert "27606" in (first["location_text"] or "")
+    assert "Thompson Hall" in (first["location_text"] or "")

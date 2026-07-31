@@ -15,11 +15,18 @@ def _normalize_text_for_date(value: Optional[str]) -> Optional[str]:
         return None
     text = re.sub(r"\s+", " ", text)
     text = text.replace("–", "-").replace("—", "-")
+
+    text = re.sub(r"^\s*(date|dates|time|when)\s*[:\-]\s*", "", text, flags=re.I)
+
     # If there is a range like "2026-05-01 - 2026-05-03" prefer the first part
     if "-" in text:
         parts = re.split(r"\s*[\-–—]\s*", text)
         if len(parts) > 1:
             text = parts[0]
+
+    text = re.sub(r"\b(?:a\.m\.|p\.m\.)\b", "", text, flags=re.I)
+    text = re.sub(r"\b(10|11|12)\b", "", text)
+    text = re.sub(r"\s+", " ", text).strip(" ,;:-")
     return text
 
 def _try_strptime_patterns(text: str) -> Optional[str]:
@@ -150,6 +157,27 @@ def _parse_zip_code(value: Optional[str]) -> str:
     return ""
 
 
+def _format_description(url: Optional[str], location_text: Optional[str], fee_text: Optional[str], start_date: Optional[str]) -> Optional[str]:
+    parts: List[str] = []
+    if start_date:
+        parts.append(f"Date: {start_date}")
+    if location_text:
+        cleaned_location = re.sub(r"\s+", " ", location_text).strip()
+        if len(cleaned_location) > 180:
+            cleaned_location = cleaned_location[:177].rstrip() + "..."
+        parts.append(f"Location: {cleaned_location}")
+    if fee_text:
+        cleaned_fee = re.sub(r"\s+", " ", fee_text).strip()
+        if len(cleaned_fee) > 120:
+            cleaned_fee = cleaned_fee[:117].rstrip() + "..."
+        parts.append(f"Fee: {cleaned_fee}")
+    if url and not parts:
+        return f"Source URL: {url}"
+    if not parts:
+        return None
+    return "\n".join(parts)
+
+
 def normalize_raw_items(raw_items: List[Dict[str, Any]]) -> List[Fair]:
     """Convert raw scraped dicts into Fair objects without guessing missing values."""
     normalized: List[Fair] = []
@@ -161,6 +189,7 @@ def normalize_raw_items(raw_items: List[Dict[str, Any]]) -> List[Fair]:
         fee_text = raw.get("fee_text")
         url = raw.get("url")
 
+        start_date = _parse_date(date_text)
         fair = Fair(
             id="",
             name=(name.strip() if isinstance(name, str) and name.strip() else ""),
@@ -170,16 +199,12 @@ def normalize_raw_items(raw_items: List[Dict[str, Any]]) -> List[Fair]:
             zip_code=_parse_zip_code(location_text),
             latitude=None,
             longitude=None,
-            start_date=_parse_date(date_text),
+            start_date=start_date,
             end_date=None,
             categories=[],
             price=_parse_fee(fee_text),
             environment=None,
-            description=(
-                f"Source URL: {url}\n\nLocation: {location_text}\n\nFee: {fee_text}"
-                if url or location_text or fee_text
-                else None
-            ),
+            description=_format_description(url, location_text, fee_text, start_date),
         )
         normalized.append(fair)
 

@@ -43,12 +43,15 @@ def main() -> None:
         return
 
     for index, (url, fair) in enumerate(matches[: args.limit], start=1):
-        print(f"{index}. {fair.name}")
-        print(f"   url: {url}")
-        print(f"   start_date: {fair.start_date}")
-        print(f"   price: {fair.price}")
-        print(f"   zip_code: {fair.zip_code}")
-        print(f"   description: {fair.description}")
+        print(f"{index}. {fair.name or 'Untitled event'}")
+        print(f"   URL: {url}")
+        print(f"   Date: {fair.start_date or 'not listed'}")
+        print(f"   Price: {fair.price if fair.price is not None else 'not listed'}")
+        print(f"   ZIP: {fair.zip_code or 'not listed'}")
+        if fair.description:
+            print("   Details:")
+            for line in fair.description.splitlines():
+                print(f"      {line}")
         print()
 
 

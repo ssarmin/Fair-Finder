@@ -72,3 +72,20 @@ def test_extracts_zip_code_from_location_text():
     fairs = normalize_raw_items(raw_items)
 
     assert fairs[0].zip_code == "27601"
+
+
+def test_parses_dates_with_prefix_and_time_range():
+    raw_items = [
+        {
+            "name": "Craft Fair",
+            "date_text": "DATE: Saturday, November 21, 2026 10 a.m.-5 p.m.",
+            "location_text": "The Crafts Center Thompson Hall 210 Jensen Drive Raleigh, NC 27606",
+            "fee_text": None,
+            "url": "https://example.com/6",
+        }
+    ]
+
+    fairs = normalize_raw_items(raw_items)
+
+    assert fairs[0].start_date == "2026-11-21"
+    assert fairs[0].zip_code == "27606"
