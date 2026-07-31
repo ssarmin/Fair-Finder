@@ -68,6 +68,29 @@ def _clean_text(text: Optional[str]) -> Optional[str]:
     return cleaned or None
 
 
+def _rank_chunk_item(item: tuple[str, int]) -> tuple[int, int, int, int, str]:
+    text, order = item
+    lower = text.lower()
+    address_score = 0
+    if re.search(r"\b\d{5}(?:-\d{4})?\b", text):
+        address_score += 5
+    if re.search(r"\b(raleigh|durham|chapel hill|cary|nc|north carolina)\b", text, re.I):
+        address_score += 3
+    if re.search(r"\b(hall|drive|street|road|avenue|ave|lane|ln|way|blvd|boulevard|parkway|pkwy|square|plaza|suite|unit|apt|box)\b", text, re.I):
+        address_score += 4
+    if re.search(r"\b(location|address|at|near)\b", lower):
+        address_score += 2
+    if re.search(r"\b(date|location)\b", lower):
+        address_score += 2
+    if re.search(r"\b(november|december|september|october|january|february|march|april|may|june|july)\b", lower):
+        address_score += 1
+    if len(text) > 220:
+        address_score -= 2
+    if "mailing address" in lower:
+        address_score -= 6
+    return (-address_score, len(text), text.count(" "), order, text)
+
+
 def _first_matching_chunk(chunks: List[str], predicate) -> Optional[str]:
     matches: List[tuple[str, int]] = []
     for index, chunk in enumerate(chunks):
@@ -78,29 +101,7 @@ def _first_matching_chunk(chunks: List[str], predicate) -> Optional[str]:
     if not matches:
         return None
 
-    def rank(item: tuple[str, int]) -> tuple[int, int, int, int, str]:
-        text, order = item
-        lower = text.lower()
-        address_score = 0
-        if re.search(r"\b\d{5}(?:-\d{4})?\b", text):
-            address_score += 5
-        if re.search(r"\b(raleigh|durham|chapel hill|cary|nc|north carolina)\b", text, re.I):
-            address_score += 3
-        if re.search(r"\b(hall|drive|street|road|avenue|ave|lane|ln|way|blvd|boulevard|parkway|pkwy|square|plaza|suite|unit|apt|box)\b", text, re.I):
-            address_score += 4
-        if re.search(r"\b(location|address|at|near)\b", lower):
-            address_score += 2
-        if re.search(r"\b(date|location)\b", lower):
-            address_score += 2
-        if re.search(r"\b(november|december|september|october|january|february|march|april|may|june|july)\b", lower):
-            address_score += 1
-        if len(text) > 220:
-            address_score -= 2
-        if "mailing address" in lower:
-            address_score -= 6
-        return (-address_score, len(text), text.count(" "), order, text)
-
-    matches.sort(key=rank)
+    matches.sort(key=_rank_chunk_item)
     return matches[0][0]
 
 
@@ -189,7 +190,6 @@ def _extract_items_from_widgets(soup: BeautifulSoup, url: str, heading_candidate
             record["date_text"] = _first_matching_chunk(lines, _looks_like_date)
             record["fee_text"] = _first_matching_chunk(lines, _looks_like_fee)
 
-        # keep original behavior which used any(record.values()) (url is always present)
         if any(record.values()):
             items.append(record)
 
@@ -197,12 +197,7 @@ def _extract_items_from_widgets(soup: BeautifulSoup, url: str, heading_candidate
 
 
 def scrape_page(url: str, delay_seconds: float = 0.5) -> List[Dict[str, Optional[str]]]:
-    """Fetch a page and extract raw event-like content from the page body.
-
-    The target page uses WordPress/Elementor widgets, so the relevant data is
-    typically found in heading tags and generic text-editor widgets rather than
-    custom event classes.
-    """
+    """Fetch a page and extract raw event-like content from the page body."""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
